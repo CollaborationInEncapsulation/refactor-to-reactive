@@ -1,0 +1,15 @@
+spring:
+  profiles:
+    active: live
+  datasource:
+    name: postgres
+    username: postgres
+    password:
+    url: jdbc:postgresql://localhost:5432/postgres
+    schema: classpath:/sql/schema.sql
+gitter:
+  auth:
+    token: ${GITTER_TOKEN}
+  api:
+    endpoint: https://api.gitter.im/
+    messages-resource: rooms/${GITTER_ROOM}/chatMessages
