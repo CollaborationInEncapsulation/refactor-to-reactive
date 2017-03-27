@@ -1,0 +1,10 @@
+spring:
+  profiles:
+    active: live
+gitter:
+  auth:
+    token: ${GITTER_TOKEN}
+  api:
+    endpoint: https://api.gitter.im/
+    messages-resource: rooms/${GITTER_ROOM}/chatMessages
+
