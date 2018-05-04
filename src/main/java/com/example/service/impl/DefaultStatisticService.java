@@ -28,7 +28,7 @@ public class DefaultStatisticService implements StatisticService {
 
     @Override
     public UsersStatisticVM updateStatistic(Iterable<MessageResponse> messages) {
-        messageRepository.save(toDomainUnits(messages));
+        messageRepository.saveAll(toDomainUnits(messages));
 
         return doGetUserStatistic();
     }
