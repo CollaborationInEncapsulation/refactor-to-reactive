@@ -1,21 +1,22 @@
 package com.example.controller;
 
-import java.util.ArrayList;
+import java.time.Duration;
 import java.util.List;
 
+import com.example.controller.vm.MessageVM;
 import com.example.controller.vm.UsersStatisticVM;
 import com.example.service.ChatService;
 import com.example.service.StatisticService;
 import com.example.service.gitter.dto.MessageResponse;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.ReplayProcessor;
+import reactor.core.scheduler.Schedulers;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import static com.example.service.impl.utils.MessageMapper.toViewModelUnits;
@@ -27,27 +28,35 @@ public class InfoResource {
 	private final ChatService<MessageResponse> chatService;
 	private final StatisticService             statisticService;
 
+	private final ReplayProcessor<UsersStatisticVM> statisticStream = ReplayProcessor.cacheLast();
+	private final ReplayProcessor<MessageVM>        messagesStream  = ReplayProcessor.create(50);
+	private final FluxSink<UsersStatisticVM>        statisticSink   = statisticStream.sink();
+	private final FluxSink<MessageVM>               messageSink     = messagesStream.sink();
+
     @Autowired
     public InfoResource(ChatService<MessageResponse> chatService,
 		    StatisticService statisticService) {
         this.chatService = chatService;
 	    this.statisticService = statisticService;
+
+		ReplayProcessor<String> cursorSupplier = ReplayProcessor.cacheLast();
+	    FluxSink<String> cursorSink = cursorSupplier.sink()
+	                                                .next("");
+
+	    cursorSupplier.delayElements(Duration.ofSeconds(1), Schedulers.elastic())
+	                  .doOnNext(c -> pullAndRespond(c, cursorSink))
+	                  .timeout(Duration.ofSeconds(3))
+	                  .retryBackoff(Long.MAX_VALUE, Duration.ofMillis(200))
+                      .subscribe();
     }
 
-    @GetMapping
-    public ResponseEntity<?> list(@RequestParam(value = "cursor", defaultValue = "") String cursor) {
-        try {
-            return pullAndRespond(cursor);
-        }
-        catch (Exception e) {
-            return ResponseEntity.noContent()
-                                 .header("cursor", cursor)
-                                 .build();
-        }
+    @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<?> stream() {
+	    return Flux.merge(messagesStream, statisticStream);
     }
 
     @SuppressWarnings("unchecked")
-    private ResponseEntity<?> pullAndRespond(String cursor) {
+    private void pullAndRespond(String cursor, FluxSink<String> cursorSink) {
         List<MessageResponse> messages = chatService.getMessagesAfter(cursor);
 
         if (!messages.isEmpty()) {
@@ -55,17 +64,13 @@ public class InfoResource {
                                         .getId();
             UsersStatisticVM statistic = statisticService.updateStatistic(messages);
 
-            List response = new ArrayList<>(toViewModelUnits(messages));
-            response.add(statistic);
+			toViewModelUnits(messages).forEach(messageSink::next);
+			statisticSink.next(statistic);
 
-            return ResponseEntity.ok()
-                                 .header("cursor", nextCursor)
-                                 .body(response);
+			cursorSink.next(nextCursor);
         }
         else {
-            return ResponseEntity.noContent()
-                                 .header("cursor", cursor)
-                                 .build();
+			cursorSink.next(cursor);
         }
     }
 }
