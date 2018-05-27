@@ -7,6 +7,8 @@ import com.example.repository.UserRepository;
 import com.example.service.StatisticService;
 import com.example.service.gitter.dto.MessageResponse;
 import com.example.service.impl.utils.UserMapper;
+import reactor.core.publisher.Mono;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -27,21 +29,20 @@ public class DefaultStatisticService implements StatisticService {
     }
 
     @Override
-    public UsersStatisticVM updateStatistic(Iterable<MessageResponse> messages) {
-        messageRepository.saveAll(toDomainUnits(messages));
-
-        return doGetUserStatistic();
+    public Mono<UsersStatisticVM> updateStatistic(Iterable<MessageResponse> messages) {
+        return messageRepository.saveAll(toDomainUnits(messages))
+                                .then(doGetUserStatistic());
     }
 
-    private UsersStatisticVM doGetUserStatistic() {
-        UserVM topActiveUser = userRepository.findMostActive()
-                                             .map(UserMapper::toViewModelUnits)
-                                             .orElse(EMPTY_USER);
+    private Mono<UsersStatisticVM> doGetUserStatistic() {
+        Mono<UserVM> topActiveUserMono = userRepository.findMostActive()
+                                                       .map(UserMapper::toViewModelUnits)
+                                                       .defaultIfEmpty(EMPTY_USER);
 
-        UserVM topMentionedUser = userRepository.findMostPopular()
-                                                .map(UserMapper::toViewModelUnits)
-                                                .orElse(EMPTY_USER);
+        Mono<UserVM> topMentionedUserMono = userRepository.findMostPopular()
+                                                          .map(UserMapper::toViewModelUnits)
+                                                          .defaultIfEmpty(EMPTY_USER);
 
-        return new UsersStatisticVM(topActiveUser, topMentionedUser);
+        return Mono.zip(topActiveUserMono, topMentionedUserMono, UsersStatisticVM::new);
     }
 }

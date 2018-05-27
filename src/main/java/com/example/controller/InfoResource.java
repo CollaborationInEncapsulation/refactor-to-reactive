@@ -1,7 +1,6 @@
 package com.example.controller;
 
 import java.time.Duration;
-import java.util.List;
 
 import com.example.controller.vm.MessageVM;
 import com.example.controller.vm.UsersStatisticVM;
@@ -10,6 +9,7 @@ import com.example.service.StatisticService;
 import com.example.service.gitter.dto.MessageResponse;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.ReplayProcessor;
 import reactor.core.scheduler.Schedulers;
 
@@ -44,9 +44,7 @@ public class InfoResource {
 	                                                .next("");
 
 	    cursorSupplier.delayElements(Duration.ofSeconds(1), Schedulers.elastic())
-	                  .doOnNext(c -> pullAndRespond(c, cursorSink))
-	                  .timeout(Duration.ofSeconds(3))
-	                  .retryBackoff(Long.MAX_VALUE, Duration.ofMillis(200))
+	                  .concatMap(c -> pullAndRespond(c, cursorSink))
                       .subscribe();
     }
 
@@ -56,21 +54,31 @@ public class InfoResource {
     }
 
     @SuppressWarnings("unchecked")
-    private void pullAndRespond(String cursor, FluxSink<String> cursorSink) {
-        List<MessageResponse> messages = chatService.getMessagesAfter(cursor);
+    private Mono<Void> pullAndRespond(String cursor, FluxSink<String> cursorSink) {
+        return chatService.getMessagesAfter(cursor)
+                          .timeout(Duration.ofSeconds(1))
+                          .retryBackoff(Long.MAX_VALUE, Duration.ofMillis(200))
+                          .flatMap(messages -> {
+	                          if (!messages.isEmpty()) {
+		                          String nextCursor = messages.get(messages.size() - 1)
+		                                                      .getId();
+		                          Mono<UsersStatisticVM> statisticMono = statisticService.updateStatistic(messages);
 
-        if (!messages.isEmpty()) {
-            String nextCursor = messages.get(messages.size() - 1)
-                                        .getId();
-            UsersStatisticVM statistic = statisticService.updateStatistic(messages);
+		                          toViewModelUnits(messages).forEach(messageSink::next);
+		                          return statisticMono.doOnSuccess(statistic -> {
+		                          	                    statisticSink.next(statistic);
 
-			toViewModelUnits(messages).forEach(messageSink::next);
-			statisticSink.next(statistic);
+			                                            cursorSink.next(nextCursor);
+		                                              })
+		                                              .timeout(Duration.ofSeconds(2))
+		                                              .retryBackoff(Long.MAX_VALUE, Duration.ofMillis(200))
+		                                              .then();
+	                          }
+	                          else {
+		                          cursorSink.next(cursor);
 
-			cursorSink.next(nextCursor);
-        }
-        else {
-			cursorSink.next(cursor);
-        }
+		                          return Mono.empty();
+	                          }
+                          });
     }
 }
