@@ -143,7 +143,6 @@
 </script>
 <script th:inline="javascript">
     /*<![CDATA[*/
-    var cursor = /*[[${cursor}]]*/'';
     var messageTemplate = _.template($('#message-template').html(), { 'imports': { 'moment': moment }});
     var statisticTemplate = _.template($('#users-statistic-template').html());
     var chatArea = $('.media-list');
@@ -154,23 +153,18 @@
         return !_.isUndefined(data.html);
     }
 
-    setInterval(function () {
-        $.get("/api/v1/info", {cursor: cursor}).done(function (data, status, request) {
-            if (data) {
-                data.forEach(function (v) {
-                    if (isMessage(v)) {
-                        chatArea.append(messageTemplate(v));
-                        scrollableArea.stop();
-                        scrollableArea.animate({scrollTop: chatArea.height()}, 500);
-                    } else {
-                        statisticArea.html(statisticTemplate(v));
-                    }
-                });
-            }
+    var evtSource = new EventSource("/api/v1/info");
+    evtSource.onmessage = function(e) {
+        var v = JSON.parse(e.data);
 
-            cursor = request.getResponseHeader('cursor');
-        });
-    }, 1000);
+        if (isMessage(v)) {
+            chatArea.append(messageTemplate(v));
+            scrollableArea.stop();
+            scrollableArea.animate({scrollTop: chatArea.height()}, 500);
+        } else {
+            statisticArea.html(statisticTemplate(v));
+        }
+    };
     /*]]>*/
 </script>
 </body>
