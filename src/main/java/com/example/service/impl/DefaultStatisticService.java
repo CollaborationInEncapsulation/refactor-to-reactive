@@ -1,18 +1,20 @@
 package com.example.service.impl;
 
+import java.time.Duration;
+
 import com.example.controller.vm.UserVM;
 import com.example.controller.vm.UsersStatisticVM;
 import com.example.repository.MessageRepository;
 import com.example.repository.UserRepository;
 import com.example.service.StatisticService;
 import com.example.service.gitter.dto.MessageResponse;
+import com.example.service.impl.utils.MessageMapper;
 import com.example.service.impl.utils.UserMapper;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import static com.example.service.impl.utils.MessageMapper.toDomainUnits;
 
 @Service
 public class DefaultStatisticService implements StatisticService {
@@ -29,9 +31,15 @@ public class DefaultStatisticService implements StatisticService {
     }
 
     @Override
-    public Mono<UsersStatisticVM> updateStatistic(Iterable<MessageResponse> messages) {
-        return messageRepository.saveAll(toDomainUnits(messages))
-                                .then(doGetUserStatistic());
+    public Flux<UsersStatisticVM> updateStatistic(Flux<MessageResponse> messagesFlux) {
+        return messagesFlux.map(MessageMapper::toDomainUnit)
+                           .flatMap(e ->
+                               messageRepository.save(e)
+                                                .retryBackoff(Long.MAX_VALUE, Duration.ofMillis(500))
+                           )
+                           .onBackpressureLatest()
+                           .concatMap(e -> this.doGetUserStatistic(), 1)
+                           .onErrorContinue((t, e) -> {});
     }
 
     private Mono<UsersStatisticVM> doGetUserStatistic() {
@@ -43,6 +51,7 @@ public class DefaultStatisticService implements StatisticService {
                                                           .map(UserMapper::toViewModelUnits)
                                                           .defaultIfEmpty(EMPTY_USER);
 
-        return Mono.zip(topActiveUserMono, topMentionedUserMono, UsersStatisticVM::new);
+        return Mono.zip(topActiveUserMono, topMentionedUserMono, UsersStatisticVM::new)
+                   .timeout(Duration.ofSeconds(2));
     }
 }

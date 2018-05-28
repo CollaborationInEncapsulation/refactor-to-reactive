@@ -1,6 +1,9 @@
 package com.example.service.impl;
 
+import java.time.Duration;
 import java.util.List;
+
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import com.example.service.ChatService;
 import com.example.service.gitter.GitterProperties;
@@ -32,6 +35,17 @@ public class GitterService implements ChatService<MessageResponse> {
     }
 
     @Override
+    public Flux<MessageResponse> getMessagesStream() {
+        return webClient.get()
+                        .uri(GitterUriBuilder.from(gitterProperties.getStream())
+                                             .build()
+                                             .toUri())
+                        .retrieve()
+                        .bodyToFlux(MessageResponse.class)
+                        .retryBackoff(Long.MAX_VALUE, Duration.ofMillis(500));
+    }
+
+    @Override
     @SneakyThrows
     public Mono<List<MessageResponse>> getMessagesAfter(String messageId) {
         MultiValueMap<String, String> query = new LinkedMultiValueMap<>();
@@ -46,6 +60,8 @@ public class GitterService implements ChatService<MessageResponse> {
                                              .build()
                                              .toUri())
                         .retrieve()
-                        .bodyToMono(new ParameterizedTypeReference<List<MessageResponse>>() {});
+                        .bodyToMono(new ParameterizedTypeReference<List<MessageResponse>>() {})
+                        .timeout(Duration.ofSeconds(1))
+                        .retryBackoff(Long.MAX_VALUE, Duration.ofMillis(500));
     }
 }
