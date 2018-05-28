@@ -29,7 +29,6 @@ repositories {
 dependencies {
     compile('org.springframework.boot:spring-boot-starter-actuator')
     compile('org.springframework.boot:spring-boot-starter-data-mongodb-reactive')
-    compile('org.springframework.boot:spring-boot-starter-web')
     compile('org.springframework.boot:spring-boot-starter-webflux')
     compile('org.springframework.boot:spring-boot-starter-thymeleaf')
     compileOnly('org.springframework.boot:spring-boot-configuration-processor')
