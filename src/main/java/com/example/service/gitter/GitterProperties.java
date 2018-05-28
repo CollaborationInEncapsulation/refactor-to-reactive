@@ -10,6 +10,7 @@ public class GitterProperties {
     private Auth auth = new Auth();
 
     private GenericProperties api;
+    private GenericProperties stream;
 
     public Auth getAuth() {
         return auth;
@@ -25,6 +26,14 @@ public class GitterProperties {
 
     public void setApi(GenericProperties api) {
         this.api = api;
+    }
+
+    public GenericProperties getStream() {
+        return stream;
+    }
+
+    public void setStream(GenericProperties stream) {
+        this.stream = stream;
     }
 
     public static class GenericProperties {

@@ -1,5 +1,6 @@
 package com.example.service.impl;
 
+import java.time.Duration;
 import java.util.Set;
 
 import com.example.controller.vm.UserVM;
@@ -43,10 +44,14 @@ public class DefaultStatisticService implements StatisticService {
     }
 
     @Override
-    public Mono<UsersStatisticVM> updateStatistic(Iterable<MessageResponse> messages) {
-        return Flux.fromIterable(messages)
-                   .flatMap(this::saveMessage)
-                   .then(this.doGetUserStatistic());
+    public Flux<UsersStatisticVM> updateStatistic(Flux<MessageResponse> messagesFlux) {
+        return messagesFlux.flatMap(m ->
+                               this.saveMessage(m)
+                                   .retryBackoff(Long.MAX_VALUE, Duration.ofMillis(500))
+                           )
+                           .onBackpressureLatest()
+                           .concatMap(e -> this.doGetUserStatistic(), 1)
+                           .onErrorContinue((t, e) -> { });
     }
 
     Mono<Message> saveMessage(MessageResponse messageResponse) {
@@ -82,6 +87,7 @@ public class DefaultStatisticService implements StatisticService {
                                                           .map(UserMapper::toViewModelUnits)
                                                           .defaultIfEmpty(EMPTY_USER);
 
-        return Mono.zip(topActiveUserMono, topMentionedUserMono, UsersStatisticVM::new);
+        return Mono.zip(topActiveUserMono, topMentionedUserMono, UsersStatisticVM::new)
+                   .timeout(Duration.ofSeconds(2));
     }
 }

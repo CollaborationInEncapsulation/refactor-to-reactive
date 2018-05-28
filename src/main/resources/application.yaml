@@ -13,3 +13,6 @@ gitter:
   api:
     endpoint: https://api.gitter.im/
     messages-resource: rooms/${GITTER_ROOM}/chatMessages
+  stream:
+    endpoint: https://stream.gitter.im/
+    messages-resource: rooms/${GITTER_ROOM}/chatMessages
