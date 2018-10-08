@@ -27,8 +27,8 @@ repositories {
 }
 
 dependencies {
-    compile('org.springframework.boot:spring-boot-starter-data-jpa')
-    runtime('org.postgresql:postgresql')
+    compile('org.springframework.data:spring-data-jdbc:1.0.0.r2dbc-SNAPSHOT')
+    compile('io.r2dbc:r2dbc-postgresql:1.0.0.BUILD-SNAPSHOT')
     compile('org.springframework.boot:spring-boot-starter-web')
     compile('org.springframework.boot:spring-boot-starter-webflux')
     compile('org.springframework.boot:spring-boot-starter-thymeleaf')

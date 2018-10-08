@@ -15,6 +15,10 @@ import com.example.service.gitter.dto.MessageResponse;
 import com.example.service.impl.utils.MentionMapper;
 import com.example.service.impl.utils.MessageMapper;
 import com.example.service.impl.utils.UserMapper;
+import io.r2dbc.postgresql.PostgresqlServerErrorException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -39,43 +43,45 @@ public class DefaultStatisticService implements StatisticService {
     }
 
     @Override
-    public UsersStatisticVM updateStatistic(Iterable<MessageResponse> messages) {
-        messages.forEach(this::saveMessage);
-
-        return doGetUserStatistic();
+    public Mono<UsersStatisticVM> updateStatistic(Iterable<MessageResponse> messages) {
+        return Flux.fromIterable(messages)
+                   .flatMap(this::saveMessage)
+                   .then(this.doGetUserStatistic());
     }
 
-    void saveMessage(MessageResponse messageResponse) {
+    Mono<Message> saveMessage(MessageResponse messageResponse) {
         Message message = MessageMapper.toDomainUnit(messageResponse);
-        Set<User> users = UserMapper.toDomainUnit(messageResponse);
+        Set<User> user = UserMapper.toDomainUnit(messageResponse);
         Set<Mention> mentions = MentionMapper.toDomainUnit(messageResponse);
 
-        for (User user : users) {
-            try {
-                userRepository.save(user);
-            } catch (Exception e) {}
-        }
-
-        try {
-            messageRepository.save(message);
-        } catch (Exception e) {}
-
-        for (Mention mention : mentions) {
-            try {
-                mentionRepository.save(mention);
-            } catch (Exception e) {}
-        }
+        return userRepository
+            .saveAll(user)
+            .onErrorContinue(PostgresqlServerErrorException.class, (t, o) -> { })
+            .then(
+                messageRepository
+                    .save(message)
+                    .flux()
+                    .onErrorContinue(PostgresqlServerErrorException.class, (t, o) -> { })
+                    .then()
+            )
+            .then(
+                mentionRepository
+                    .saveAll(mentions)
+                    .onErrorContinue(PostgresqlServerErrorException.class, (t, o) -> { })
+                    .then()
+            )
+            .then(Mono.just(message));
     }
 
-    private UsersStatisticVM doGetUserStatistic() {
-        UserVM topActiveUser = userRepository.findMostActive()
-                                             .map(UserMapper::toViewModelUnits)
-                                             .orElse(EMPTY_USER);
+    private Mono<UsersStatisticVM> doGetUserStatistic() {
+        Mono<UserVM> topActiveUserMono = userRepository.findMostActive()
+                                                       .map(UserMapper::toViewModelUnits)
+                                                       .defaultIfEmpty(EMPTY_USER);
 
-        UserVM topMentionedUser = userRepository.findMostPopular()
-                                                .map(UserMapper::toViewModelUnits)
-                                                .orElse(EMPTY_USER);
+        Mono<UserVM> topMentionedUserMono = userRepository.findMostPopular()
+                                                          .map(UserMapper::toViewModelUnits)
+                                                          .defaultIfEmpty(EMPTY_USER);
 
-        return new UsersStatisticVM(topActiveUser, topMentionedUser);
+        return Mono.zip(topActiveUserMono, topMentionedUserMono, UsersStatisticVM::new);
     }
 }

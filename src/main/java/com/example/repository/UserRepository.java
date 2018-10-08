@@ -2,12 +2,12 @@ package com.example.repository;
 
 import com.example.domain.User;
 
-import java.util.Optional;
+import reactor.core.publisher.Mono;
 
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.CrudRepository;
+import org.springframework.data.jdbc.repository.query.Query;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 
-public interface UserRepository extends CrudRepository<User, String> {
+public interface UserRepository extends ReactiveCrudRepository<User, String> {
 
     @Query(
         value =
@@ -21,10 +21,9 @@ public interface UserRepository extends CrudRepository<User, String> {
                     ") as grouped_messages " +
                 "ON users.id = grouped_messages.user_id " +
             "ORDER BY activity DESC " +
-            "LIMIT 1",
-        nativeQuery = true
+            "LIMIT 1"
     )
-    Optional<User> findMostActive();
+    Mono<User> findMostActive();
 
 
     @Query(
@@ -39,8 +38,7 @@ public interface UserRepository extends CrudRepository<User, String> {
                     ") as grouped_mentions " +
                 "ON users.id = grouped_mentions.user_id " +
             "ORDER BY popularity DESC " +
-            "LIMIT 1",
-        nativeQuery = true
+            "LIMIT 1"
     )
-    Optional<User> findMostPopular();
+    Mono<User> findMostPopular();
 }
